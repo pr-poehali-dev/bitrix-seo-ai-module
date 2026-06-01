@@ -12,6 +12,8 @@ const TABS: { id: TabId; label: string; icon: string; color: string }[] = [
   { id: "settings", label: "Настройки", icon: "Settings2", color: "#facc15" },
 ];
 
+const SEO_API_URL = "https://functions.poehali.dev/ed59248c-f917-4d0f-b7ee-19b763ea4e61";
+
 const KEYWORDS_DATA = [
   { kw: "купить квартиру москва", pos: 3, prev: 7, vol: 42000, diff: 62 },
   { kw: "аренда офиса центр", pos: 8, prev: 15, vol: 18500, diff: 44 },
@@ -119,20 +121,49 @@ function ScoreRing({ score, size = 64 }: { score: number; size?: number }) {
   );
 }
 
+interface AICluster {
+  name: string;
+  keywords: string[];
+  volume_estimate: string;
+  competition: string;
+}
+
+interface AIKeywordsResult {
+  clusters: AICluster[];
+  top_opportunities: string[];
+  summary: string;
+}
+
 function KeywordsTab() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  const [aiResult, setAiResult] = useState("");
+  const [aiResult, setAiResult] = useState<AIKeywordsResult | null>(null);
+  const [aiError, setAiError] = useState("");
+  const [topic, setTopic] = useState("недвижимость москва");
 
   const filtered = KEYWORDS_DATA.filter(k => k.kw.includes(query.toLowerCase()));
 
-  const handleAI = () => {
+  const handleAI = async () => {
     setLoading(true);
-    setAiResult("");
-    setTimeout(() => {
+    setAiResult(null);
+    setAiError("");
+    try {
+      const resp = await fetch(SEO_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "keywords", topic }),
+      });
+      const json = await resp.json();
+      if (json.ok) {
+        setAiResult(json.data as AIKeywordsResult);
+      } else {
+        setAiError(json.error || "Ошибка генерации");
+      }
+    } catch {
+      setAiError("Не удалось подключиться к ИИ");
+    } finally {
       setLoading(false);
-      setAiResult("Обнаружено 12 новых кластеров с высоким потенциалом. Рекомендую добавить: «ипотека без первоначального взноса», «квартиры у метро», «новостройки эконом класс». Конкуренция умеренная, объём — 80 000+ запросов/мес.");
-    }, 1800);
+    }
   };
 
   return (
@@ -169,18 +200,66 @@ function KeywordsTab() {
               className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-[#22f5a0]/40 transition-colors text-white placeholder:text-white/30"
             />
           </div>
-          <button onClick={handleAI} className="btn-neon px-5 py-2.5 rounded-xl text-sm flex items-center gap-2 whitespace-nowrap">
-            <Icon name="Sparkles" size={15} />
-            {loading ? "ИИ анализирует..." : "ИИ-анализ кластеров"}
-          </button>
+          <div className="flex gap-2">
+            <input
+              value={topic}
+              onChange={e => setTopic(e.target.value)}
+              placeholder="Тематика сайта..."
+              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#a855f7]/40 transition-colors text-white placeholder:text-white/30 w-40"
+            />
+            <button onClick={handleAI} disabled={loading} className="btn-neon px-5 py-2.5 rounded-xl text-sm flex items-center gap-2 whitespace-nowrap disabled:opacity-60">
+              <Icon name="Sparkles" size={15} />
+              {loading ? "Анализирует..." : "ИИ-кластеры"}
+            </button>
+          </div>
         </div>
 
+        {aiError && (
+          <div className="mb-4 p-3 rounded-xl border text-sm" style={{ background: "rgba(244,63,94,0.08)", borderColor: "rgba(244,63,94,0.2)", color: "#f43f5e" }}>
+            {aiError}
+          </div>
+        )}
+
+        {loading && (
+          <div className="mb-4 space-y-2">
+            {[80, 60, 70, 50, 65].map((w, i) => (
+              <div key={i} className="h-3 rounded-lg shimmer" style={{ width: `${w}%`, background: "rgba(255,255,255,0.08)" }} />
+            ))}
+          </div>
+        )}
+
         {aiResult && (
-          <div className="mb-4 p-4 rounded-xl border" style={{ background: "rgba(168,85,247,0.08)", borderColor: "rgba(168,85,247,0.2)" }}>
-            <div className="flex gap-2">
-              <Icon name="Sparkles" size={14} className="mt-0.5 flex-shrink-0" style={{ color: "#a855f7" }} />
-              <p className="text-sm text-white/80 leading-relaxed">{aiResult}</p>
+          <div className="mb-5 space-y-3 animate-fade-in">
+            <div className="p-4 rounded-xl border" style={{ background: "rgba(168,85,247,0.08)", borderColor: "rgba(168,85,247,0.2)" }}>
+              <div className="flex gap-2 mb-3">
+                <Icon name="Sparkles" size={14} className="mt-0.5 flex-shrink-0" style={{ color: "#a855f7" }} />
+                <p className="text-sm text-white/80 leading-relaxed">{aiResult.summary}</p>
+              </div>
+              {aiResult.top_opportunities?.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs text-white/40">ТОП возможности:</span>
+                  {aiResult.top_opportunities.map((kw, i) => (
+                    <span key={i} className="tag-badge">{kw}</span>
+                  ))}
+                </div>
+              )}
             </div>
+            {aiResult.clusters?.map((cl, i) => (
+              <div key={i} className="p-3 rounded-xl border" style={{ background: "rgba(34,245,160,0.04)", borderColor: "rgba(34,245,160,0.12)" }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold" style={{ color: "#22f5a0" }}>{cl.name}</span>
+                  <div className="flex gap-2 text-xs text-white/40">
+                    <span>📊 {cl.volume_estimate}</span>
+                    <span>⚡ {cl.competition}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {cl.keywords?.map((kw, j) => (
+                    <span key={j} className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}>{kw}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -232,22 +311,43 @@ function KeywordsTab() {
   );
 }
 
+interface MetaResult {
+  title: string;
+  description: string;
+  keywords: string;
+  score: number;
+  tips: string[];
+}
+
 function MetaTab() {
   const [selected, setSelected] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [generatedTitle, setGeneratedTitle] = useState("");
-  const [generatedDesc, setGeneratedDesc] = useState("");
+  const [metaResult, setMetaResult] = useState<MetaResult | null>(null);
+  const [metaError, setMetaError] = useState("");
 
-  const handleGenerate = (i: number) => {
+  const handleGenerate = async (i: number, page?: { url: string; title: string; desc: string }) => {
     setSelected(i);
     setGenerating(true);
-    setGeneratedTitle("");
-    setGeneratedDesc("");
-    setTimeout(() => {
+    setMetaResult(null);
+    setMetaError("");
+    const p = page || META_PAGES[i] || { url: "/", title: "", desc: "" };
+    try {
+      const resp = await fetch(SEO_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "meta", url: p.url, title: p.title, description: p.desc }),
+      });
+      const json = await resp.json();
+      if (json.ok) {
+        setMetaResult(json.data as MetaResult);
+      } else {
+        setMetaError(json.error || "Ошибка генерации");
+      }
+    } catch {
+      setMetaError("Не удалось подключиться к ИИ");
+    } finally {
       setGenerating(false);
-      setGeneratedTitle("Купить квартиру в Москве | Лучшие предложения от застройщиков 2025");
-      setGeneratedDesc("Более 2 400 квартир в Москве и Подмосковье. Ипотека от 5.9%, рассрочка 0%. Подберём вариант за 10 минут — звоните!");
-    }, 2000);
+    }
   };
 
   return (
@@ -297,38 +397,85 @@ function MetaTab() {
         </div>
       </div>
 
-      {(generatedTitle || generating) && (
+      {(metaResult || generating || metaError) && (
         <div className="glass rounded-2xl p-5 animate-fade-in">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center ai-pulse" style={{ background: "rgba(168,85,247,0.2)" }}>
               <Icon name="Sparkles" size={14} style={{ color: "#a855f7" }} />
             </div>
-            <span className="text-sm font-semibold" style={{ color: "#a855f7" }}>ИИ генерирует мета-теги</span>
+            <span className="text-sm font-semibold" style={{ color: "#a855f7" }}>
+              {generating ? "ИИ генерирует мета-теги..." : "Результат от ИИ"}
+            </span>
           </div>
-          {generating ? (
+
+          {metaError && (
+            <div className="p-3 rounded-xl text-sm" style={{ background: "rgba(244,63,94,0.1)", color: "#f43f5e" }}>{metaError}</div>
+          )}
+
+          {generating && (
             <div className="space-y-3">
-              {[70, 90, 55].map((w, i) => (
+              {[70, 90, 55, 40].map((w, i) => (
                 <div key={i} className="h-4 rounded-lg shimmer" style={{ width: `${w}%`, background: "rgba(255,255,255,0.08)" }} />
               ))}
             </div>
-          ) : (
+          )}
+
+          {metaResult && !generating && (
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-white/40 uppercase tracking-wider mb-1.5 block">Title тег</label>
-                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm font-medium" style={{ color: "#22f5a0" }}>{generatedTitle}</div>
-                <div className="text-xs text-white/30 mt-1">{generatedTitle.length} / 60 символов</div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs text-white/40 uppercase tracking-wider">Title тег</label>
+                  <span className="text-xs font-semibold" style={{ color: metaResult.title.length <= 60 ? "#22f5a0" : "#fb923c" }}>
+                    {metaResult.title.length} / 60
+                  </span>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm font-medium" style={{ color: "#22f5a0" }}>{metaResult.title}</div>
               </div>
               <div>
-                <label className="text-xs text-white/40 uppercase tracking-wider mb-1.5 block">Meta Description</label>
-                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/70 leading-relaxed">{generatedDesc}</div>
-                <div className="text-xs text-white/30 mt-1">{generatedDesc.length} / 160 символов</div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs text-white/40 uppercase tracking-wider">Meta Description</label>
+                  <span className="text-xs font-semibold" style={{ color: metaResult.description.length <= 160 ? "#22f5a0" : "#fb923c" }}>
+                    {metaResult.description.length} / 160
+                  </span>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/70 leading-relaxed">{metaResult.description}</div>
               </div>
+              {metaResult.keywords && (
+                <div>
+                  <label className="text-xs text-white/40 uppercase tracking-wider mb-1.5 block">Ключевые слова</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {metaResult.keywords.split(",").map((kw, i) => (
+                      <span key={i} className="tag-badge">{kw.trim()}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {metaResult.score && (
+                <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "rgba(34,245,160,0.06)" }}>
+                  <ScoreRing score={metaResult.score} size={48} />
+                  <div>
+                    <div className="text-sm font-semibold text-white/80">SEO Score после оптимизации</div>
+                    {metaResult.tips?.length > 0 && (
+                      <ul className="mt-1 space-y-0.5">
+                        {metaResult.tips.map((tip, i) => (
+                          <li key={i} className="text-xs text-white/45 flex gap-1.5"><span style={{ color: "#22f5a0" }}>•</span>{tip}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2 pt-1">
                 <button className="btn-neon px-4 py-2 rounded-xl text-sm flex items-center gap-1.5">
                   <Icon name="Check" size={14} />
                   Применить
                 </button>
-                <button className="btn-ghost-neon px-4 py-2 rounded-xl text-sm">Перегенерировать</button>
+                <button
+                  onClick={() => selected !== null && handleGenerate(selected, META_PAGES[selected])}
+                  className="btn-ghost-neon px-4 py-2 rounded-xl text-sm"
+                >
+                  Перегенерировать
+                </button>
               </div>
             </div>
           )}

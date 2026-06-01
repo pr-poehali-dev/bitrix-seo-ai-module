@@ -1,0 +1,36 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Генерация мета-тегов",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "mode": "meta",
+        "url": "/catalog",
+        "title": "Каталог",
+        "description": ""
+      },
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Генерация ключевых слов",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "mode": "keywords",
+        "topic": "недвижимость москва"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
